@@ -4,7 +4,6 @@ plugins {
     id 'net.minecraftforge.gradle' version '5.1.+'
     id 'org.parchmentmc.librarian.forgegradle' version '1.+'
     id 'org.spongepowered.mixin' version '0.7.+'
-    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 version = "${minecraft_version}-${mod_version}"
@@ -154,10 +153,6 @@ mixin {
     debug.export = true
 }
 
-configurations {
-    implementation.extendsFrom shadow
-}
-
 dependencies {
     // Specify the version of Minecraft to use. If this is any group other than 'net.minecraft', it is assumed
     // that the dep is a ForgeGradle 'patcher' dependency, and its patches will be applied.
@@ -166,8 +161,6 @@ dependencies {
 
     // Mixin annotation processor - generates the refmap
     annotationProcessor "org.spongepowered:mixin:${mixin_version}:processor"
-
-    shadow "io.netty:netty-codec-haproxy:${netty_codec_haproxy_version}"
 
     // Real mod deobf dependency examples - these get remapped to your current mappings
     // compileOnly fg.deobf("mezz.jei:jei-${mc_version}:${jei_version}:api") // Adds JEI API as a compile dependency
@@ -216,7 +209,6 @@ java {
 }
 
 jar {
-    archiveClassifier = 'slim'
     manifest {
         attributes([
                 'Specification-Title': mod_id,
@@ -239,27 +231,10 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
 
-def relocateTargets = ['io.netty']
-shadowJar {
-    archiveClassifier = ''
-    configurations = [project.configurations.shadow]
-    relocateTargets.forEach {
-        relocate it, "${project.group}.relocated.$it"
-    }
-}
-
-reobf {
-    shadowJar {}
-}
-
 afterEvaluate {
-    assemble.dependsOn shadowJar
-
     jar.finalizedBy reobfJar
-    shadowJar.finalizedBy reobfShadowJar
 
     reobfJar.dependsOn 'addMixinsToJar'
-    reobfShadowJar.dependsOn 'addMixinsToShadowJar'
 }
 
 // Example configuration to allow publishing using the maven-publish plugin
@@ -272,9 +247,6 @@ publishing {
     publications {
         mavenJava(MavenPublication) {
             artifactId = mod_id
-            artifact(shadowJar) {
-                classifier = 'fat'
-            }
             artifact(jar) {
                 classifier = null
             }
