@@ -10,10 +10,10 @@ import java.net.SocketAddress;
  * Adds Accessor for address
  *
  * @author PanSzelescik
- * @see NetworkManager#address
+ * @see NetworkManager#socketAddress
  */
 @Mixin(NetworkManager.class)
 public interface ProxyProtocolAddressSetter {
     @Accessor
-    void setAddress(SocketAddress address);
+    void setSocketAddress(SocketAddress socketAddress);
 }

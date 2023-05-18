@@ -80,6 +80,6 @@ public class ProxyProtocolHandler extends ChannelInboundHandlerAdapter {
             }
         }
 
-        ((ProxyProtocolAddressSetter) connection).setAddress(socketAddr);
+        ((ProxyProtocolAddressSetter) connection).setSocketAddress(socketAddr);
     }
 }

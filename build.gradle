@@ -2,8 +2,9 @@ plugins {
     id 'eclipse'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '5.1.+'
-    id 'org.parchmentmc.librarian.forgegradle' version '1.+'
     id 'org.spongepowered.mixin' version '0.7.+'
+    id 'wtf.gofancy.fancygradle' version '1.1.2-0'
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 version = "${minecraft_version}-${mod_version}"
@@ -49,8 +50,7 @@ minecraft {
             // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
             property 'forge.logging.console.level', 'debug'
 
-            // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
-            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'fml.coreMods.load', "${mod_base_package}.FMLMixinLoadingPlugin"
 
             // These arguments allow for optional authentication with Mojang servers.
             // If you want to authenticate, put these properties in GRADLE_HOME/gradle.properties.
@@ -83,43 +83,7 @@ minecraft {
 
             property 'forge.logging.console.level', 'debug'
 
-            property 'forge.enabledGameTestNamespaces', mod_id
-
-            mods {
-                "${mod_id}" {
-                    source sourceSets.main
-                }
-            }
-        }
-
-        // This run config launches GameTestServer and runs all registered gametests, then exits.
-        // By default, the server will crash when no gametests are provided.
-        // The gametest system is also enabled by default for other run configs under the /test command.
-        gameTestServer {
-            workingDirectory project.file('run')
-
-            property 'forge.logging.markers', 'REGISTRIES'
-
-            property 'forge.logging.console.level', 'debug'
-
-            property 'forge.enabledGameTestNamespaces', mod_id
-
-            mods {
-                "${mod_id}" {
-                    source sourceSets.main
-                }
-            }
-        }
-
-        data {
-            workingDirectory project.file('run')
-
-            property 'forge.logging.markers', 'REGISTRIES'
-
-            property 'forge.logging.console.level', 'debug'
-
-            // Specify the modid for data generation, where to output the resulting resource, and where to look for existing resources.
-            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+            property 'fml.coreMods.load', "${mod_base_package}.FMLMixinLoadingPlugin"
 
             mods {
                 "${mod_id}" {
@@ -141,6 +105,11 @@ repositories {
     // flatDir {
     //     dir 'libs'
     // }
+
+    maven {
+        name = 'SpongePowered'
+        url = 'https://repo.spongepowered.org/repository/maven-public/'
+    }
 }
 
 mixin {
@@ -153,6 +122,17 @@ mixin {
     debug.export = true
 }
 
+configurations {
+    shade
+    implementation.extendsFrom shade
+}
+
+configurations.all {
+    if (it.name.startsWith('_compileJava_') || it.name == 'minecraft') {
+        exclude group: 'net.minecraftforge', module: 'mergetool'
+    }
+}
+
 dependencies {
     // Specify the version of Minecraft to use. If this is any group other than 'net.minecraft', it is assumed
     // that the dep is a ForgeGradle 'patcher' dependency, and its patches will be applied.
@@ -160,7 +140,16 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
     // Mixin annotation processor - generates the refmap
-    annotationProcessor "org.spongepowered:mixin:${mixin_version}:processor"
+    if (System.getProperty('idea.sync.active') != 'true') {
+        annotationProcessor "org.spongepowered:mixin:${mixin_ap_version}:processor"
+    }
+
+    // Mixin itself
+    shade("org.spongepowered:mixin:${mixin_version}") {
+        exclude module: 'guava'
+        exclude module: 'commons-io'
+        exclude module: 'gson'
+    }
 
     // Real mod deobf dependency examples - these get remapped to your current mappings
     // compileOnly fg.deobf("mezz.jei:jei-${mc_version}:${jei_version}:api") // Adds JEI API as a compile dependency
@@ -175,14 +164,20 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 }
 
+fancyGradle {
+    patches {
+        codeChickenLib
+        asm
+        // resources
+    }
+}
+
 // This block of code expands all the gradle properties in the specified resource targets.
 // It copies them into the targets and expands all the defined properties.
-def resourceTargets = ['META-INF/mods.toml', 'pack.mcmeta', "${mod_id}.mixins.json".toString()]
+def resourceTargets = ['mcmod.info', 'pack.mcmeta', 'version.properties', "${mod_id}.mixins.json".toString()]
 def intoTargets = ["$rootDir/out/production/resources/", "$rootDir/out/production/${project.name}.main/", "$rootDir/bin/main/"]
 def replaceProperties = [mod_id: mod_id, mod_name: mod_name, mod_version: mod_version,
-        mod_authors: mod_authors, mod_description: mod_description,
-        minecraft_version_range: minecraft_version_range, forge_version_range: forge_version_range,
-        loader_version_range: loader_version_range]
+        mod_authors: mod_authors, mod_description: mod_description.replace('\n', '\\n'), minecraft_version: minecraft_version]
 processResources {
     inputs.properties replaceProperties
     replaceProperties.put 'project', project
@@ -217,7 +212,12 @@ jar {
                 'Implementation-Title': project.name,
                 'Implementation-Version': mod_version,
                 'Implementation-Vendor': mod_authors,
-                'Implementation-Timestamp': new Date().format('yyyy-MM-dd\'T\'HH:mm:ssZ')
+                'Implementation-Timestamp': new Date().format('yyyy-MM-dd\'T\'HH:mm:ssZ'),
+                'FMLCorePlugin': "${mod_base_package}.FMLMixinLoadingPlugin",
+                'FMLCorePluginContainsFMLMod': 'false',
+                'ForceLoadAsMod': 'true',
+                'TweakClass': 'org.spongepowered.asm.launch.MixinTweaker',
+                'TweakOrder': '0'
         ])
     }
     from("LICENSE") {
@@ -231,10 +231,31 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
 
+def relocateTargets = [] // ['org.spongepowered']
+shadowJar {
+    archiveClassifier = ''
+    configurations = [project.configurations.shade]
+    relocateTargets.forEach {
+        relocate it, "${project.group}.relocated.$it"
+    }
+
+    exclude 'LICENSE.txt', 'META-INF/MANIFEST.MF', 'META-INF/maven/**', 'META-INF/*.RSA', 'META-INF/*.SF'
+
+    finalizedBy 'reobfShadowJar'
+}
+
+assemble.dependsOn shadowJar
+
+reobf {
+    shadowJar {}
+}
+
 afterEvaluate {
     jar.finalizedBy reobfJar
+    shadowJar.finalizedBy reobfShadowJar
 
     reobfJar.dependsOn 'addMixinsToJar'
+    reobfShadowJar.dependsOn 'addMixinsToShadowJar'
 }
 
 // Example configuration to allow publishing using the maven-publish plugin
@@ -247,6 +268,9 @@ publishing {
     publications {
         mavenJava(MavenPublication) {
             artifactId = mod_id
+            artifact(shadowJar) {
+                classifier = 'fat'
+            }
             artifact(jar) {
                 classifier = null
             }

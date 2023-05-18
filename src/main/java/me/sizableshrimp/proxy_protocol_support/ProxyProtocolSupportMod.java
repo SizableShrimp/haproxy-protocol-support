@@ -3,11 +3,13 @@ package me.sizableshrimp.proxy_protocol_support;
 import me.sizableshrimp.proxy_protocol_support.config.CIDRMatcher;
 import me.sizableshrimp.proxy_protocol_support.config.CommonConfig;
 import me.sizableshrimp.proxy_protocol_support.config.TCPShieldIntegration;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.common.config.Config;
+import net.minecraftforge.common.config.ConfigManager;
+import net.minecraftforge.fml.client.event.ConfigChangedEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.relauncher.FMLLaunchHandler;
+import net.minecraftforge.fml.relauncher.Side;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -16,10 +18,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-@Mod(ProxyProtocolSupportMod.MODID)
-@Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.MOD)
+@Mod(modid = ProxyProtocolSupportMod.MODID, name = ProxyProtocolSupportMod.NAME, useMetadata = true, serverSideOnly = true, acceptableRemoteVersions = "*")
+@Mod.EventBusSubscriber(modid = ProxyProtocolSupportMod.MODID)
 public class ProxyProtocolSupportMod {
     public static final String MODID = "proxy_protocol_support";
+    public static final String NAME = "Proxy Protocol Support";
     public static final Logger LOGGER = LogManager.getLogger();
 
     private static boolean enabled = false;
@@ -27,7 +30,16 @@ public class ProxyProtocolSupportMod {
     public static final List<CIDRMatcher> whitelistedIPsView = Collections.unmodifiableList(whitelistedIPs);
 
     public ProxyProtocolSupportMod() {
-        CommonConfig.register();
+        ConfigManager.sync(MODID, Config.Type.INSTANCE);
+
+        loadConfig();
+    }
+
+    @SubscribeEvent
+    static void onConfigChangedEvent(ConfigChangedEvent.OnConfigChangedEvent event) {
+        if (MODID.equals(event.getModID())) {
+            loadConfig();
+        }
     }
 
     public static boolean isEnabled() {
@@ -38,12 +50,11 @@ public class ProxyProtocolSupportMod {
         return whitelistedIPsView;
     }
 
-    @SubscribeEvent
-    public static void onModConfigLoadingReloading(ModConfig.ModConfigEvent event) throws IOException {
-        if (FMLEnvironment.dist != Dist.DEDICATED_SERVER || event.getConfig().getType() != ModConfig.Type.COMMON)
+    private static void loadConfig() {
+        if (FMLLaunchHandler.side() != Side.SERVER)
             return;
 
-        if (!CommonConfig.INSTANCE.enableProxyProtocol.get()) {
+        if (!CommonConfig.enableProxyProtocol) {
             LOGGER.info("Proxy Protocol disabled!");
             return;
         }
@@ -51,14 +62,18 @@ public class ProxyProtocolSupportMod {
         enabled = true;
         LOGGER.info("Proxy Protocol enabled!");
 
-        for (String ip : CommonConfig.INSTANCE.whitelistedIPs.get()) {
+        for (String ip : CommonConfig.whitelistedIPs) {
             whitelistedIPs.add(new CIDRMatcher(ip));
         }
 
-        if (CommonConfig.INSTANCE.whitelistTCPShieldServers.get()) {
+        if (CommonConfig.whitelistTCPShieldServers) {
             LOGGER.info("TCPShield integration enabled!");
 
-            whitelistedIPs.addAll(TCPShieldIntegration.getWhitelistedIPs());
+            try {
+                whitelistedIPs.addAll(TCPShieldIntegration.getWhitelistedIPs());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         LOGGER.debug("Using {} whitelisted IPs: {}", whitelistedIPs.size(), whitelistedIPs);

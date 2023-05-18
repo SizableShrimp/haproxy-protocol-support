@@ -6,15 +6,8 @@ pluginManagement {
             url 'https://maven.minecraftforge.net/'
         }
         maven {
-            name 'ParchmentMC'
-            url 'https://maven.parchmentmc.org'
-        }
-    }
-    resolutionStrategy {
-        eachPlugin {
-            if (requested.id.toString() == 'org.spongepowered.mixin') {
-                useModule("org.spongepowered:mixingradle:${requested.version}")
-            }
+            name 'FancyGradle'
+            url 'https://gitlab.com/api/v4/projects/26758973/packages/maven'
         }
     }
 }

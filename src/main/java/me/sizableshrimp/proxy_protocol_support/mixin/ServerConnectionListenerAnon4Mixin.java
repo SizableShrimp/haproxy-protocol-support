@@ -15,8 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * @see HAProxyMessageDecoder
  * @see ProxyProtocolHandler
  */
-@Mixin(targets = "net.minecraft.network.NetworkSystem$1")
-public class ServerConnectionListenerAnon1Mixin {
+@Mixin(targets = "net.minecraft.network.NetworkSystem$4")
+public class ServerConnectionListenerAnon4Mixin {
     @Inject(method = "initChannel", at = @At("TAIL"))
     private void proxy_protocol_support$onInitChannel_Tail(Channel channel, CallbackInfo ci) {
         if (!ProxyProtocolSupportMod.isEnabled())
